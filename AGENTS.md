@@ -17,6 +17,25 @@
   - Extensions (channel plugins): `extensions/*` (e.g. `extensions/msteams`, `extensions/matrix`, `extensions/zalo`, `extensions/zalouser`, `extensions/voice-call`)
 - When adding channels/extensions/apps/docs, update `.github/labeler.yml` and create matching GitHub labels (use existing channel/extension label colors).
 
+## Architecture Overview
+
+OpenClaw is a multi-channel AI gateway: it bridges messaging platforms to AI agent backends via a local WebSocket control plane.
+
+- **Gateway** (`src/gateway/`) — WebSocket server (ws://127.0.0.1:18789). Central hub for session management, presence, config, cron, webhooks, and the control UI. All channels and the CLI communicate through the gateway.
+- **Channels** — Each messaging integration has its own directory (`src/telegram/`, `src/discord/`, `src/slack/`, `src/signal/`, `src/imessage/`, `src/whatsapp/`, `src/line/`, `src/webchat/`). Shared routing, allowlists, pairing, and chunking logic lives in `src/channels/` and `src/routing/`. Extension channels (Teams, Matrix, Zalo, voice-call, etc.) live under `extensions/`.
+- **Agents** (`src/agents/`) — Pi agent runtime (RPC mode), tool definitions/adapters, skills platform, model failover, and auth profiles. The agent layer is what actually talks to LLM providers.
+- **Config** (`src/config/`) — Zod-validated configuration loading, session store, legacy migration, runtime overrides.
+- **CLI** (`src/cli/`, `src/commands/`) — Commander.js command tree. Entry point: `openclaw.mjs` → `src/entry.ts`. Uses `createDefaultDeps()` for dependency injection.
+- **Media** (`src/media/`, `src/media-understanding/`) — Image/audio/video pipeline: transcription, size caps, temp file lifecycle.
+- **Infra** (`src/infra/`) — Binary management, environment normalization, port checks, error handling, logging, update checks, Tailscale.
+- **Plugin SDK** (`src/plugin-sdk/`) — Public API surface for extension authors (`openclaw/plugin-sdk`). Plugins install via `npm install --omit=dev` in their own directory.
+- **Browser** (`src/browser/`) — Chromium control for snapshots, actions, uploads.
+- **Canvas** (`src/canvas-host/`) — A2UI (agent-to-UI) push/reset/eval/snapshot for the live visual workspace.
+- **Web UI** (`ui/`) — Vite + Lit web components control interface.
+- **Native apps** (`apps/`) — macOS (SwiftUI), iOS (SwiftUI), Android (Kotlin/Compose). The macOS app hosts the gateway as a menubar app.
+
+Data flow: User message → Channel → Gateway → Agent runtime → LLM provider → response back through the same chain.
+
 ## Docs Linking (Mintlify)
 
 - Docs are hosted on Mintlify (docs.openclaw.ai).
@@ -86,6 +105,8 @@
 - Framework: Vitest with V8 coverage thresholds (70% lines/branches/functions/statements).
 - Naming: match source names with `*.test.ts`; e2e in `*.e2e.test.ts`.
 - Run `pnpm test` (or `pnpm test:coverage`) before pushing when you touch logic.
+- Single file: `pnpm vitest run src/path/to/file.test.ts` (no watch mode).
+- Single test by name: `pnpm vitest run -t "test name pattern" src/path/to/file.test.ts`.
 - Do not set test workers above 16; tried already.
 - Live tests (real keys): `CLAWDBOT_LIVE_TEST=1 pnpm test:live` (OpenClaw-only) or `LIVE=1 pnpm test:live` (includes provider live tests). Docker: `pnpm test:docker:live-models`, `pnpm test:docker:live-gateway`. Onboarding Docker E2E: `pnpm test:docker:onboard`.
 - Full kit + what’s covered: `docs/testing.md`.
